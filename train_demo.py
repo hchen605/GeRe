@@ -74,8 +74,8 @@ def main():
     # Configure training parameters
     training_args = Seq2SeqTrainingArguments(
         output_dir="./ckpts/test_tiny_ckpts",
-        per_device_train_batch_size=6,
-        gradient_accumulation_steps=11,
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=66,
         num_train_epochs=3,
         logging_steps=1,
         bf16=True,

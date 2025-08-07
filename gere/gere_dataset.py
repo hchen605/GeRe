@@ -39,7 +39,7 @@ class GeReConfig(datasets.BuilderConfig):
             self,
             *args,
             data_args=None,
-            data_file='./slim_redpajama/slim_redpajama.sampled_of_1_chunk.head1k.jsonl',
+            data_file='./slimpajama/slimpajama_6B_chunk0_head1k.jsonl',
             gere_dataset_name='SlimRedpajama',
             num_gere_samples=1000,
             **kwargs

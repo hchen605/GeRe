@@ -360,7 +360,7 @@ class GeReTrainer(Seq2SeqTrainer):
         self.args = kwargs['args']
         self.gere_dataset = load_dataset(
             os.path.join(CURRENT_DIR, "gere_dataset.py"),
-            data_file=os.path.join(CURRENT_DIR, "slim_redpajama/slim_redpajama.sampled_of_1_chunk.head1k.jsonl"),
+            data_file=os.path.join(CURRENT_DIR, "slimpajama/slimpajama_6B_chunk0_head1k.jsonl"),
             gere_dataset_name='SlimRedpajama',
             num_gere_samples=1000,
             split='train',
