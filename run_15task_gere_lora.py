@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForCausalLM, Seq2SeqTrainingArguments
 from peft import LoraConfig, get_peft_model, TaskType
 from gere import GeReTrainer  # from Qznan/GeRe
+from transformers import Trainer, TrainingArguments
 
 # -------------------------
 # 15-task long-sequence orders (Progressive Prompts style)
@@ -389,7 +390,7 @@ def main():
     ap.add_argument("--save_generations_dir", type=str, default="", help="If set, dump JSONL of (prompt, gold, pred, correct) per eval.")
     ap.add_argument("--save_generations_max", type=int, default=200, help="Max rows to save per (step, task). 0=all.")
     ap.add_argument("--gen_max_new_tokens", type=int, default=8, help="Max new tokens for generation when saving outputs.")
-
+    ap.add_argument("--ft", default="gere")
     args = ap.parse_args()
 
     set_seed(args.seed)
@@ -423,6 +424,32 @@ def main():
             cached_eval[task_name] = DataLoader(ds_eval, batch_size=args.eval_batch_size, shuffle=False, collate_fn=data_collator)
         return cached_eval[task_name]
 
+    model.train()  # ensure training mode
+    if True:  # if you pass gradient_checkpointing=True in args
+        # Trainer will call gradient_checkpointing_enable(), but being explicit helps with PEFT
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        # REQUIRED with checkpointing: disable key/value caching or the graph gets cut
+        if hasattr(model, "config"):
+            model.config.use_cache = False
+        # Some transformer wrappers benefit from this to keep inputs requiring grad
+        if hasattr(model, "enable_input_require_grads"):
+            try:
+                model.enable_input_require_grads()
+            except Exception:
+                pass
+
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    tensors_trainable = sum(1 for p in model.parameters() if p.requires_grad)
+    print(f"Total params: {total:,}")
+    print(f"Trainable params: {trainable:,}  (~{trainable/total*100:.3f}%)")
+    print(f"Trainable tensors: {tensors_trainable}")
+    # num_trainable = sum(p.requires_grad for p in model.parameters())
+    # print('num_trainable: ', num_trainable)
+    # assert num_trainable > 0, "No trainable parameters detected — LoRA may not be attached."
+
+
     # Train sequentially; after each task, re-evaluate all seen tasks
     for t_idx, t in enumerate(tasks):
         ds_train = make_dataset(t, tokenizer, split="train")
@@ -443,6 +470,15 @@ def main():
             report_to="none",
             gradient_checkpointing=True,
         )
+
+        # >>> Plain Trainer (no GeRe)
+        # trainer = Trainer(
+        #     model=model,
+        #     args=training_args,
+        #     train_dataset=ds_train,
+        #     data_collator=data_collator,
+        #     tokenizer=tokenizer,
+        # )
 
         trainer = GeReTrainer(
             model=model,
@@ -470,7 +506,7 @@ def main():
             if args.save_generations_dir:
                 outfile = os.path.join(
                     args.save_generations_dir,
-                    f"sft_order{args.order}_after_t{t_idx+1:02d}_{ti}.jsonl"
+                    f"{args.ft}_order{args.order}_after_t{t_idx+1:02d}_{ti}.jsonl"
                 )
 
             acc, n_saved = eval_and_maybe_log_jsonl(
